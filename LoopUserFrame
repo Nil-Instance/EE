@@ -1,0 +1,144 @@
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local isCooldown = false -- Variable para controlar el cooldown
+local scriptActive = false -- Variable para controlar si el script está activo
+local currentTargetPlayer = nil -- Variable para almacenar el jugador actual siendo atacado
+
+-- Función para crear la interfaz de usuario (UI)
+local function createUI()
+    local ScreenGui = Instance.new("ScreenGui", game.Players.LocalPlayer:WaitForChild("PlayerGui"))
+    ScreenGui.ResetOnSpawn = false -- No reiniciar la UI al reaparecer
+
+    local ToggleButton = Instance.new("TextButton", ScreenGui)
+    local TextBox = Instance.new("TextBox", ScreenGui)
+
+    -- Configurar el ToggleButton
+    ToggleButton.Size = UDim2.new(0, 80, 0, 40) -- Tamaño reducido
+    ToggleButton.Position = UDim2.new(1, -100, 0, 20)
+    ToggleButton.Text = "Off"
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 128) -- Azul oscuro
+    ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255) -- Texto blanco
+
+    -- Configurar el TextBox
+    TextBox.Size = UDim2.new(0, 180, 0, 40) -- Tamaño reducido
+    TextBox.Position = UDim2.new(1, -220, 0, 80)
+    TextBox.PlaceholderText = "User to loop"
+    TextBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fondo negro
+    TextBox.TextColor3 = Color3.fromRGB(255, 255, 255) -- Texto blanco
+    TextBox.BorderSizePixel = 0 -- Sin borde
+    TextBox.BackgroundTransparency = 0 -- Asegura que el fondo es opaco
+
+    -- Aplicar el efecto de glow usando un Frame con el asset ID
+    local glowFrame = Instance.new("Frame", TextBox)
+    glowFrame.Size = UDim2.new(1, 0, 1, 0)
+    glowFrame.Position = UDim2.new(0, 0, 0, 0)
+    glowFrame.BackgroundTransparency = 1 -- Totalmente transparente
+    glowFrame.BorderSizePixel = 0 -- Sin borde
+
+    local glowImage = Instance.new("ImageLabel", glowFrame)
+    glowImage.Size = UDim2.new(1, 0, 1, 0)
+    glowImage.Position = UDim2.new(0, 0, 0, 0)
+    glowImage.Image = "rbxassetid://4996891970" -- Asset de glow
+    glowImage.BackgroundTransparency = 1
+    glowImage.ImageColor3 = Color3.fromRGB(0, 0, 255) -- Color azul
+    glowImage.ImageTransparency = 0.5 -- Ajusta la transparencia del glow
+
+    -- Función para cambiar el estado del toggle
+    ToggleButton.MouseButton1Click:Connect(function()
+        scriptActive = not scriptActive
+        if scriptActive then
+            ToggleButton.Text = "On"
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 255) -- Azul más fuerte
+        else
+            ToggleButton.Text = "Off"
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 128) -- Azul oscuro
+        end
+    end)
+    
+    return TextBox
+end
+
+-- Función para encontrar un jugador por parte de su username o DisplayName
+local function getPlayerByPartialName(partialName)
+    partialName = partialName:lower() -- Convertir el texto a minúsculas
+    for _, player in pairs(Players:GetPlayers()) do
+        -- Verificar si el nombre o el DisplayName comienza con el texto parcial (sin importar mayúsculas)
+        if player.Name:lower():sub(1, #partialName) == partialName or player.DisplayName:lower():sub(1, #partialName) == partialName then
+            return player -- Retornar el jugador que coincide con el inicio del nombre o DisplayName
+        end
+    end
+    return nil
+end
+
+-- Función principal que ejecuta el ataque de manera automática
+local function startcooking(targetPlayer)
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("Humanoid") then
+        local Target = targetPlayer.Character.Humanoid
+        local tool = LocalPlayer.Backpack:FindFirstChild("Kawaii Revolver") -- Buscar el tool en el Backpack del jugador
+        local damageRemote = tool and tool:FindFirstChild("DamageRemote") -- Verificar la existencia del DamageRemote
+
+        -- Asegúrate de que DamageRemote exista
+        if damageRemote then
+            repeat
+                if Target and Target.Health > 0 and not isCooldown and scriptActive then
+                    isCooldown = true
+
+                    -- Equipar el tool, ejecutar el evento, y desequiparlo rápidamente
+                    tool.Parent = Character -- Mueve el tool al Character (equiparlo)
+                    damageRemote:FireServer(Target) -- Ejecuta el ataque al objetivo
+                    tool.Parent = LocalPlayer.Backpack -- Regresa el tool al Backpack
+
+                    -- Esperar 0.5 segundos antes de permitir la siguiente llamada
+                    wait(0.5)
+                    isCooldown = false
+                end
+                wait() -- Mantiene el bucle activo sin bloquear el proceso
+            until not Target or Target.Health <= 0 or not scriptActive -- Rompe el ciclo si el objetivo ya no está disponible o tiene 0 de salud
+        else
+            print("DamageRemote no encontrado en la herramienta.")
+        end
+    else
+        StarterGui:SetCore("SendNotification", {
+            Title = "Player not found",
+            Text = "The player is nil or has left.",
+            Icon = "http://www.roblox.com/asset/?id=5585095509", -- Agregar ícono
+            Duration = 3 -- Duración de la notificación en segundos
+        })
+    end
+end
+
+-- Crear la UI y obtener el TextBox
+local TextBox = createUI()
+
+-- Variable para almacenar el último nombre de usuario ingresado
+local lastUsername = ""
+
+-- Bucle para monitorear el nombre de usuario ingresado y el estado del toggle
+while true do
+    wait(1) -- Esperar un segundo entre comprobaciones
+
+    -- Obtener el texto del TextBox (nombre de usuario parcial)
+    local enteredUsername = TextBox.Text
+
+    -- Si el texto cambió o el toggle está activado
+    if enteredUsername ~= lastUsername or scriptActive then
+        -- Intentar obtener el nuevo jugador con el nombre parcial
+        local newTargetPlayer = getPlayerByPartialName(enteredUsername)
+
+        -- Si encontramos un nuevo jugador y no es el mismo que ya estamos atacando
+        if newTargetPlayer and newTargetPlayer ~= currentTargetPlayer then
+            currentTargetPlayer = newTargetPlayer -- Actualizar el jugador actual
+            startcooking(currentTargetPlayer) -- Iniciar ataque al nuevo jugador
+        end
+
+        -- Actualizar el último nombre de usuario para que no siga repitiendo el ataque
+        lastUsername = enteredUsername
+    end
+
+    -- Si el toggle está apagado, dejar de atacar al jugador actual
+    if not scriptActive then
+        currentTargetPlayer = nil -- Dejar de enfocarse en el jugador actual si se apaga el toggle
+    end
+end
